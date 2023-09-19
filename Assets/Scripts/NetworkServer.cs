@@ -1,8 +1,13 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Assertions;
 using Unity.Collections;
 using Unity.Networking.Transport;
 using System.Text;
+using System.Net;
+using System.IO;
+using UnityEngine.TextCore.Text;
 
 public class NetworkServer : MonoBehaviour
 {
@@ -16,6 +21,15 @@ public class NetworkServer : MonoBehaviour
 
     const int MaxNumberOfClientConnections = 1000;
 
+    private Dictionary<string, NetworkConnection> LoggedInUsers = new Dictionary<string, NetworkConnection>();
+
+    struct Credentials
+    {
+        public string Username;
+        public string Password;
+        public NetworkConnection Connection;
+        public bool isNewUser;
+    }
     void Start()
     {
         networkDriver = NetworkDriver.Create();
@@ -138,8 +152,89 @@ public class NetworkServer : MonoBehaviour
 
     private void ProcessReceivedMsg(string msg)
     {
-        Debug.Log("Msg received = " + msg);
+        // Deserialize the JSON string back into the Credentials struct
+        Credentials receivedCredentials = JsonUtility.FromJson<Credentials>(msg);
+
+        // Now you can access the username and password
+        string username = receivedCredentials.Username;
+        string password = receivedCredentials.Password; 
+        NetworkConnection connection = receivedCredentials.Connection;
+        bool isnewuser = receivedCredentials.isNewUser;
+        
+
+        // Use the username and password as needed
+        Debug.Log("Received Username: " + username + " Received Password: " + password + " ID: " + connection.InternalId);
+        string line;
+        String[] strlist;
+        bool userexists = false;
+        try
+        {
+            using (StreamReader reader = new StreamReader("UserDatabase.txt"))
+            {
+
+                while ((line = reader.ReadLine()) != null)
+                {
+                    strlist = line.Split(' ');
+
+                    switch (int.Parse(strlist[0]))
+                    {
+                        case 0:
+                            if (strlist[1] == username)
+                            {
+                                if (isnewuser)
+                                {
+                                    SendMessageToClient("username already taken", networkConnections[connection.InternalId]);
+                                    return;
+                                }
+
+                                if (strlist[2] == password)
+                                {
+                                    if (LoggedInUsers.ContainsKey(username) == false)
+                                    {
+                                        SendMessageToClient("login successful", networkConnections[connection.InternalId]);
+                                        LoggedInUsers.Add(username, connection);
+                                    }
+                                    else
+                                        SendMessageToClient("user already logged in", networkConnections[connection.InternalId]);
+                                    return;
+                                }
+                                else
+                                {
+                                    SendMessageToClient("password is incorrect", networkConnections[connection.InternalId]);
+                                }
+                            }
+
+                            break;
+
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading file: {ex.Message}");
+
+        }
+
+        if (isnewuser)
+        {
+            if(username.Contains(" ") || password.Contains(" "))
+                SendMessageToClient("username and/or password cannot contains spaces", networkConnections[connection.InternalId]);
+            else
+            {
+
+                using (StreamWriter writer = new StreamWriter("UserDatabase.txt", true))
+                {
+                    writer.WriteLine($"0 {username} {password}");
+                }
+
+                SendMessageToClient("account created!", networkConnections[connection.InternalId]);
+            }
+        }
+
     }
+
+    
 
     public void SendMessageToClient(string msg, NetworkConnection networkConnection)
     {
