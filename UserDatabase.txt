@@ -1,4 +1,2 @@
-0 bob joe
-0 ethan dolman
-0 ea sports
-0 lets go
+ethan dolman
+bob joe
