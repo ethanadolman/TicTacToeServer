@@ -114,6 +114,12 @@ static public class NetworkServerProcessing
                     SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.hostUserID, pipeline);
                     GameRoomList.Remove(Room);
                 }
+                else
+                {
+                    SendMessageToClient($"{ServerToClientSignifiers.ClientLeft}, Returning to lobby", Room.hostUserID, pipeline);
+                    Room.isFull = false;
+                }
+
 
                 break;
             }
@@ -183,10 +189,11 @@ static public class ServerToClientSignifiers
     public const int ReturnToLobby = 7;
     public const int GameRoomFound = 8;
     public const int ClientJoined = 9;
-    public const int GameRoomFull = 10;
-    public const int GameStartSuccess = 11;
-    public const int GameStartFail = 12;
-    public const int GameRoomGameInProgress = 13;
+    public const int ClientLeft = 10;
+    public const int GameRoomFull = 11;
+    public const int GameStartSuccess = 12;
+    public const int GameStartFail = 13;
+    public const int GameRoomGameInProgress = 14;
 }
 
 #endregion
