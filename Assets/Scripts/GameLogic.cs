@@ -22,6 +22,8 @@ public class GameRoom
     public int clientUserID;
     public bool isInProgress;
     public bool isFull;
+    public bool isHostTurn;
+    public int[] tiles;
 
     public GameRoom(string name, int hostUser)
     {
@@ -29,6 +31,8 @@ public class GameRoom
         this.hostUserID = hostUser;
         isInProgress = false;
         isFull = false;
+        isHostTurn = true;
+        tiles = new int[9];
     }
 }
 public class GameLogic : MonoBehaviour
@@ -44,8 +48,8 @@ public class GameLogic : MonoBehaviour
 
     void Update()
     {
-        if (Input.GetKeyDown(KeyCode.A))
-            NetworkServerProcessing.SendMessageToClient("Hello client's world, sincerely your network server", 0, TransportPipeline.ReliableAndInOrder);
+        //if (Input.GetKeyDown(KeyCode.A))
+           // NetworkServerProcessing.SendMessageToClient("Hello client's world, sincerely your network server", 0, TransportPipeline.ReliableAndInOrder);
     }
 
     void LoadDatabase()
@@ -82,6 +86,30 @@ public class GameLogic : MonoBehaviour
                 writer.WriteLine($"{User.username} {User.password}");
             }
         }
+    }
+
+    public int CheckWinner(int[] tiles)
+    {
+        // check rows
+        for (int i = 1; i < 2; i++)
+        {
+            // check rows
+            if (tiles[0] == i && tiles[1] == i && tiles[2] == i) { return i; }
+            if (tiles[3] == i && tiles[4] == i && tiles[5] == i) { return i; }
+            if (tiles[6] == i && tiles[7] == i && tiles[8] == i) { return i; }
+
+            // check columns
+            if (tiles[0] == i && tiles[3] == i && tiles[6] == i) { return i; }
+            if (tiles[1] == i && tiles[4] == i && tiles[5] == i) { return i; }
+            if (tiles[2] == i && tiles[5] == i && tiles[6] == i) { return i; }
+
+            // check diags
+            if (tiles[0] == i && tiles[4] == i && tiles[8] == i) { return i; }
+            if (tiles[2] == i && tiles[4] == i && tiles[6] == i) { return i; }
+
+        }
+
+        return 0;
     }
 
     private void OnDestroy()

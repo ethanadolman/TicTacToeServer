@@ -41,7 +41,7 @@ static public class NetworkServerProcessing
                 SendMessageToClient($"{ServerToClientSignifiers.UserNotExist},user does not exist", clientConnectionID, pipeline);
                 break;
             }
-            case ClientToServerSignifiers.createAccount:
+            case ClientToServerSignifiers.CreateAccount:
             {
                 foreach (var User in UserDatabase)
                 {
@@ -60,7 +60,7 @@ static public class NetworkServerProcessing
                 UserDatabase.AddLast(new Credentials(csv[1], csv[2]));
                 break;
             }
-            case ClientToServerSignifiers.findGame:
+            case ClientToServerSignifiers.FindGame:
             {
                 foreach (var Room in GameRoomList)
                 {
@@ -88,7 +88,7 @@ static public class NetworkServerProcessing
                 GameRoomList.AddLast(new GameRoom(csv[1], clientConnectionID));
                 break;
             }
-            case ClientToServerSignifiers.gameStart:
+            case ClientToServerSignifiers.GameStart:
             {
                 GameRoom Room = GameRoomList.FirstOrDefault(x => x.name == csv[1]);
                 if (Room == null) return; //if this runs we have a serious problem.
@@ -104,7 +104,7 @@ static public class NetworkServerProcessing
                 }
                 break;
             }
-            case ClientToServerSignifiers.leaveWaitingRoom:
+            case ClientToServerSignifiers.LeaveWaitingRoom:
             {
                 GameRoom Room = GameRoomList.FirstOrDefault(x => x.name == csv[1]);
                 if (Room == null) return; //if this runs we have a serious problem.
@@ -121,6 +121,67 @@ static public class NetworkServerProcessing
                 }
 
 
+                break;
+            }
+            case ClientToServerSignifiers.GameMove:
+            {
+                    GameRoom Room = GameRoomList.FirstOrDefault(x => x.name == csv[1]);
+                    if (Room == null) return; //if this runs we have a serious problem.
+
+                    if (Room.tiles[int.Parse(csv[2])] != 0)
+                    {
+                        //send message invalid move
+                        SendMessageToClient($"{ServerToClientSignifiers.InvalidMove},Invalid move", clientConnectionID, pipeline);
+                        return;
+                    }
+
+                    if (Room.isHostTurn && clientConnectionID == Room.hostUserID)
+                    {
+                        Room.tiles[int.Parse(csv[2])] = 1;
+                        Room.isHostTurn = false;
+                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{csv[2]}", Room.hostUserID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{csv[2]}", Room.clientUserID, pipeline);
+                    }
+                    else if (!Room.isHostTurn && clientConnectionID == Room.clientUserID)
+                    {
+                        Room.tiles[int.Parse(csv[2])] = 2;
+                        Room.isHostTurn = true;
+                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{csv[2]}", Room.clientUserID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{csv[2]}", Room.hostUserID, pipeline);
+                    }
+                    else
+                    {
+                        SendMessageToClient($"{ServerToClientSignifiers.NotYourTurn},It is not your turn", clientConnectionID, pipeline);
+                    }
+
+                    if(gameLogic.CheckWinner(Room.tiles) == 1)
+                    {
+                        SendMessageToClient($"{ServerToClientSignifiers.GameWin},You Win", Room.hostUserID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.GameLose},You Lose", Room.clientUserID, pipeline);
+                    }
+                    else if (gameLogic.CheckWinner(Room.tiles) == 2)
+                    {
+                        SendMessageToClient($"{ServerToClientSignifiers.GameWin},You Win", Room.clientUserID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.GameLose},You Lose", Room.hostUserID, pipeline);
+                    }
+                    break;
+            }
+            case ClientToServerSignifiers.LeaveGame:
+            {
+                GameRoom Room = GameRoomList.FirstOrDefault(x => x.name == csv[1]);
+                if (Room == null) return; //if this runs we have a serious problem.
+                if (clientConnectionID == Room.hostUserID)
+                {
+                    SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.hostUserID, pipeline);
+                    SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", Room.clientUserID, pipeline);
+                }
+                else
+                {
+                    SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.clientUserID, pipeline);
+                    SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", Room.hostUserID, pipeline);
+                }
+
+                GameRoomList.Remove(Room);
                 break;
             }
         }
@@ -170,11 +231,12 @@ static public class NetworkServerProcessing
 static public class ClientToServerSignifiers
 {
     public const int Login = 1;
-    public const int createAccount = 2;
-    public const int findGame = 3;
-    public const int gameStart = 4;
-    public const int leaveWaitingRoom = 5;
-    public const int leaveGame = 6;
+    public const int CreateAccount = 2;
+    public const int FindGame = 3;
+    public const int GameStart = 4;
+    public const int LeaveWaitingRoom = 5;
+    public const int LeaveGame = 6;
+    public const int GameMove = 7;
 }
 
 static public class ServerToClientSignifiers
@@ -194,6 +256,13 @@ static public class ServerToClientSignifiers
     public const int GameStartSuccess = 12;
     public const int GameStartFail = 13;
     public const int GameRoomGameInProgress = 14;
+    public const int InvalidMove = 15;
+    public const int SuccessfulMove = 16;
+    public const int SuccessfulOpponentMove = 17;
+    public const int NotYourTurn = 18;
+    public const int GameWin = 19;
+    public const int GameLose = 20;
+    public const int OpponentDisconnected = 21;
 }
 
 #endregion
