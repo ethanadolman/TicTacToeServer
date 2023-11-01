@@ -65,14 +65,22 @@ static public class NetworkServerProcessing
                 foreach (var Room in GameRoomList)
                 {
                     if (Room.name != csv[1]) continue;
-                    if (Room.isFull)
+                    if (Room.isFull && !Room.isInProgress)
                     {
-                            SendMessageToClient($"{ServerToClientSignifiers.GameRoomFull}, Existing game room with name is full", clientConnectionID, pipeline);
+                        Room.observerIDs.AddLast(clientConnectionID);
+                        SendMessageToClient($"{ServerToClientSignifiers.FullGameRoomFound}, Joining full game", clientConnectionID, pipeline);
                             return;
                     }
                     else if (Room.isInProgress)
                     {
-                        SendMessageToClient($"{ServerToClientSignifiers.GameRoomGameInProgress}, Existing game with name already in progress", clientConnectionID, pipeline);
+                        Room.observerIDs.AddLast(clientConnectionID);
+                        string tiles = "";
+                        foreach (var tile in Room.tiles)
+                        {
+                            if(tiles == "") tiles += tile;
+                            else tiles += "," + tile;
+                        }
+                        SendMessageToClient($"{ServerToClientSignifiers.FullGameRoomFoundInProgress},{tiles}", clientConnectionID, pipeline);
                         return;
                     }
                     else
@@ -96,6 +104,7 @@ static public class NetworkServerProcessing
                 {
                     SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess}, Starting Game", Room.hostUserID, pipeline);
                     SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess}, Starting Game", Room.clientUserID, pipeline);
+                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess}, Starting Game", ID, pipeline); }
                     Room.isInProgress = true;
                 }
                 else
@@ -108,16 +117,17 @@ static public class NetworkServerProcessing
             {
                 GameRoom Room = GameRoomList.FirstOrDefault(x => x.name == csv[1]);
                 if (Room == null) return; //if this runs we have a serious problem.
-                if(Room.isFull)SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.clientUserID, pipeline);
-                if (clientConnectionID == Room.hostUserID)
+                if (clientConnectionID == Room.hostUserID || clientConnectionID == Room.clientUserID)
                 {
                     SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.hostUserID, pipeline);
-                    GameRoomList.Remove(Room);
+                    SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.clientUserID, pipeline);
+                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", ID, pipeline); }
+                        GameRoomList.Remove(Room);
                 }
                 else
                 {
-                    SendMessageToClient($"{ServerToClientSignifiers.ClientLeft}, Returning to lobby", Room.hostUserID, pipeline);
-                    Room.isFull = false;
+                    SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", clientConnectionID, pipeline);
+                    Room.observerIDs.Remove(clientConnectionID);
                 }
 
 
@@ -131,7 +141,8 @@ static public class NetworkServerProcessing
                     if (Room.tiles[int.Parse(csv[2])] != 0)
                     {
                         //send message invalid move
-                        SendMessageToClient($"{ServerToClientSignifiers.InvalidMove},Invalid move", clientConnectionID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.InvalidMove},Invalid move", clientConnectionID,
+                            pipeline);
                         return;
                     }
 
@@ -141,6 +152,7 @@ static public class NetworkServerProcessing
                         Room.isHostTurn = false;
                         SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{csv[2]}", Room.hostUserID, pipeline);
                         SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{csv[2]}", Room.clientUserID, pipeline);
+                        foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{csv[2]}", ID, pipeline); }
                     }
                     else if (!Room.isHostTurn && clientConnectionID == Room.clientUserID)
                     {
@@ -148,6 +160,7 @@ static public class NetworkServerProcessing
                         Room.isHostTurn = true;
                         SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{csv[2]}", Room.clientUserID, pipeline);
                         SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{csv[2]}", Room.hostUserID, pipeline);
+                        foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{csv[2]}", ID, pipeline); }
                     }
                     else
                     {
@@ -174,14 +187,23 @@ static public class NetworkServerProcessing
                 {
                     SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.hostUserID, pipeline);
                     SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", Room.clientUserID, pipeline);
+                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", ID, pipeline); }
+                    GameRoomList.Remove(Room);
+
                 }
-                else
+                else if (clientConnectionID == Room.clientUserID)
                 {
                     SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.clientUserID, pipeline);
                     SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", Room.hostUserID, pipeline);
+                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", ID, pipeline); }
+                    GameRoomList.Remove(Room);
+                }
+                else
+                {
+                    SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", clientConnectionID, pipeline);
+                    Room.observerIDs.Remove(clientConnectionID);
                 }
 
-                GameRoomList.Remove(Room);
                 break;
             }
         }
@@ -251,11 +273,11 @@ static public class ServerToClientSignifiers
     public const int ReturnToLobby = 7;
     public const int GameRoomFound = 8;
     public const int ClientJoined = 9;
-    public const int ClientLeft = 10;
-    public const int GameRoomFull = 11;
+    public const int ClientLeft = 10;//no need to use anymore
+    public const int FullGameRoomFound = 11;
     public const int GameStartSuccess = 12;
     public const int GameStartFail = 13;
-    public const int GameRoomGameInProgress = 14;
+    public const int FullGameRoomFoundInProgress = 14;
     public const int InvalidMove = 15;
     public const int SuccessfulMove = 16;
     public const int SuccessfulOpponentMove = 17;

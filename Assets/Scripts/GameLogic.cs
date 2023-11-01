@@ -20,6 +20,7 @@ public class GameRoom
     public string name;
     public int hostUserID;
     public int clientUserID;
+    public LinkedList<int> observerIDs;
     public bool isInProgress;
     public bool isFull;
     public bool isHostTurn;
@@ -33,6 +34,7 @@ public class GameRoom
         isFull = false;
         isHostTurn = true;
         tiles = new int[9];
+        observerIDs = new LinkedList<int>();
     }
 }
 public class GameLogic : MonoBehaviour
@@ -93,6 +95,9 @@ public class GameLogic : MonoBehaviour
         // check rows
         for (int i = 1; i < 2; i++)
         {
+            //012
+            //345
+            //678
             // check rows
             if (tiles[0] == i && tiles[1] == i && tiles[2] == i) { return i; }
             if (tiles[3] == i && tiles[4] == i && tiles[5] == i) { return i; }
@@ -100,8 +105,8 @@ public class GameLogic : MonoBehaviour
 
             // check columns
             if (tiles[0] == i && tiles[3] == i && tiles[6] == i) { return i; }
-            if (tiles[1] == i && tiles[4] == i && tiles[5] == i) { return i; }
-            if (tiles[2] == i && tiles[5] == i && tiles[6] == i) { return i; }
+            if (tiles[1] == i && tiles[4] == i && tiles[7] == i) { return i; }
+            if (tiles[2] == i && tiles[5] == i && tiles[8] == i) { return i; }
 
             // check diags
             if (tiles[0] == i && tiles[4] == i && tiles[8] == i) { return i; }
