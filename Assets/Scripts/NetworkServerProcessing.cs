@@ -10,7 +10,11 @@ using UnityEngine;
 
 static public class NetworkServerProcessing
 {
+
     public static LinkedList<Credentials> UserDatabase;
+
+    public static Dictionary<int, string> LoggedInUsers = new Dictionary<int, string>();
+
     public static LinkedList<GameRoom> GameRoomList = new LinkedList<GameRoom>();
     #region Send and Receive Data Functions
     static public void ReceivedMessageFromClient(string msg, int clientConnectionID, TransportPipeline pipeline)
@@ -31,7 +35,14 @@ static public class NetworkServerProcessing
                     {
                         if (User.password == csv[2])
                         {
-                            SendMessageToClient($"{ServerToClientSignifiers.LoginSuccess},login successful", clientConnectionID, pipeline);
+                            if(LoggedInUsers.ContainsValue(User.username)) 
+                                SendMessageToClient($"{ServerToClientSignifiers.LoginFail},User Already Logged in", clientConnectionID, pipeline);
+                            else
+                            {
+                                SendMessageToClient($"{ServerToClientSignifiers.LoginSuccess},login successful", clientConnectionID, pipeline);
+                                LoggedInUsers.Add(clientConnectionID, User.username);
+                            }
+
                             return;
                         }
                         SendMessageToClient($"{ServerToClientSignifiers.LoginFail},Incorrect Password", clientConnectionID, pipeline);
@@ -68,7 +79,7 @@ static public class NetworkServerProcessing
                     if (Room.isFull && !Room.isInProgress)
                     {
                         Room.observerIDs.AddLast(clientConnectionID);
-                        SendMessageToClient($"{ServerToClientSignifiers.FullGameRoomFound}, Joining full game", clientConnectionID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.FullGameRoomFound},{LoggedInUsers[Room.hostUserID]},{LoggedInUsers[Room.clientUserID]}, Joining full game", clientConnectionID, pipeline);
                             return;
                     }
                     else if (Room.isInProgress)
@@ -80,19 +91,19 @@ static public class NetworkServerProcessing
                             if(tiles == "") tiles += tile;
                             else tiles += "," + tile;
                         }
-                        SendMessageToClient($"{ServerToClientSignifiers.FullGameRoomFoundInProgress},{tiles}", clientConnectionID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.FullGameRoomFoundInProgress},{LoggedInUsers[Room.hostUserID]},{LoggedInUsers[Room.clientUserID]},{tiles}", clientConnectionID, pipeline);
                         return;
                     }
                     else
                     {
-                        SendMessageToClient($"{ServerToClientSignifiers.GameRoomFound}, Existing game room found", clientConnectionID, pipeline);
                         Room.clientUserID = clientConnectionID;
                         Room.isFull = true;
-                        SendMessageToClient($"{ServerToClientSignifiers.ClientJoined}, Client has joined", Room.hostUserID, pipeline);
+                            SendMessageToClient($"{ServerToClientSignifiers.GameRoomFound},{LoggedInUsers[Room.hostUserID]},{LoggedInUsers[Room.clientUserID]}, Existing game room found", clientConnectionID, pipeline);
+                            SendMessageToClient($"{ServerToClientSignifiers.ClientJoined},{LoggedInUsers[Room.hostUserID]},{LoggedInUsers[Room.clientUserID]}, Client has joined", Room.hostUserID, pipeline);
                         return;
                     }
                 }
-                SendMessageToClient($"{ServerToClientSignifiers.NewGameRoom}, Creating new game room", clientConnectionID, pipeline);
+                    SendMessageToClient($"{ServerToClientSignifiers.NewGameRoom},{LoggedInUsers[clientConnectionID]}, Creating new game room", clientConnectionID, pipeline);
                 GameRoomList.AddLast(new GameRoom(csv[1], clientConnectionID));
                 break;
             }
@@ -102,9 +113,9 @@ static public class NetworkServerProcessing
                 if (Room == null) return; //if this runs we have a serious problem.
                 if (Room.isFull)
                 {
-                    SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess}, Starting Game", Room.hostUserID, pipeline);
-                    SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess}, Starting Game", Room.clientUserID, pipeline);
-                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess}, Starting Game", ID, pipeline); }
+                    SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess},{LoggedInUsers[Room.hostUserID]},{LoggedInUsers[Room.clientUserID]}, Starting Game", Room.hostUserID, pipeline);
+                    SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess},{LoggedInUsers[Room.hostUserID]},{LoggedInUsers[Room.clientUserID]}, Starting Game", Room.clientUserID, pipeline);
+                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.GameStartSuccess},{LoggedInUsers[Room.hostUserID]},{LoggedInUsers[Room.clientUserID]}, Starting Game", ID, pipeline); }
                     Room.isInProgress = true;
                 }
                 else
@@ -141,8 +152,8 @@ static public class NetworkServerProcessing
                     if (Room.tiles[int.Parse(csv[2])] != 0)
                     {
                         //send message invalid move
-                        SendMessageToClient($"{ServerToClientSignifiers.InvalidMove},Invalid move", clientConnectionID,
-                            pipeline);
+                        if (clientConnectionID == Room.clientUserID || clientConnectionID == Room.hostUserID) SendMessageToClient($"{ServerToClientSignifiers.InvalidMove},Invalid move", clientConnectionID, pipeline);
+                        else SendMessageToClient($"{ServerToClientSignifiers.InvalidMove},Observers cannot interact with the board", clientConnectionID, pipeline);
                         return;
                     }
 
@@ -150,21 +161,22 @@ static public class NetworkServerProcessing
                     {
                         Room.tiles[int.Parse(csv[2])] = 1;
                         Room.isHostTurn = false;
-                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{csv[2]}", Room.hostUserID, pipeline);
-                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{csv[2]}", Room.clientUserID, pipeline);
-                        foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{csv[2]}", ID, pipeline); }
+                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{LoggedInUsers[Room.clientUserID]},{csv[2]}", Room.hostUserID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{LoggedInUsers[Room.clientUserID]},{csv[2]}", Room.clientUserID, pipeline);
+                        foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{LoggedInUsers[Room.clientUserID]},{csv[2]}", ID, pipeline); }
                     }
                     else if (!Room.isHostTurn && clientConnectionID == Room.clientUserID)
                     {
                         Room.tiles[int.Parse(csv[2])] = 2;
                         Room.isHostTurn = true;
-                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{csv[2]}", Room.clientUserID, pipeline);
-                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{csv[2]}", Room.hostUserID, pipeline);
-                        foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{csv[2]}", ID, pipeline); }
+                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{LoggedInUsers[Room.hostUserID]},{csv[2]}", Room.clientUserID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.SuccessfulOpponentMove},{LoggedInUsers[Room.hostUserID]},{csv[2]}", Room.hostUserID, pipeline);
+                        foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.SuccessfulMove},{LoggedInUsers[Room.hostUserID]},{csv[2]}", ID, pipeline); }
                     }
                     else
                     {
-                        SendMessageToClient($"{ServerToClientSignifiers.NotYourTurn},It is not your turn", clientConnectionID, pipeline);
+                        if(clientConnectionID == Room.clientUserID || clientConnectionID == Room.hostUserID) SendMessageToClient($"{ServerToClientSignifiers.NotYourTurn},It is not your turn", clientConnectionID, pipeline);
+                        else SendMessageToClient($"{ServerToClientSignifiers.NotYourTurn},Observers cannot interact with the board", clientConnectionID, pipeline);
                     }
 
                     if(gameLogic.CheckWinner(Room.tiles) == 1)
@@ -186,16 +198,16 @@ static public class NetworkServerProcessing
                 if (clientConnectionID == Room.hostUserID)
                 {
                     SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.hostUserID, pipeline);
-                    SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", Room.clientUserID, pipeline);
-                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", ID, pipeline); }
+                    SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, {LoggedInUsers[Room.hostUserID]} Disconnected", Room.clientUserID, pipeline);
+                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, {LoggedInUsers[Room.hostUserID]} Disconnected", ID, pipeline); }
                     GameRoomList.Remove(Room);
 
                 }
                 else if (clientConnectionID == Room.clientUserID)
                 {
                     SendMessageToClient($"{ServerToClientSignifiers.ReturnToLobby}, Returning to lobby", Room.clientUserID, pipeline);
-                    SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", Room.hostUserID, pipeline);
-                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, Opponent Disconnected", ID, pipeline); }
+                    SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, {LoggedInUsers[Room.clientUserID]} Disconnected", Room.hostUserID, pipeline);
+                    foreach (var ID in Room.observerIDs) { SendMessageToClient($"{ServerToClientSignifiers.OpponentDisconnected}, {LoggedInUsers[Room.clientUserID]} Disconnected", ID, pipeline); }
                     GameRoomList.Remove(Room);
                 }
                 else
@@ -204,6 +216,24 @@ static public class NetworkServerProcessing
                     Room.observerIDs.Remove(clientConnectionID);
                 }
 
+                break;
+            }
+            case ClientToServerSignifiers.PlayerMessage:
+            {
+                GameRoom Room = GameRoomList.FirstOrDefault(x => x.name == csv[1]);
+                if (Room == null) return; //if this runs we have a serious problem.
+                if (clientConnectionID == Room.hostUserID)
+                {
+                        SendMessageToClient($"{ServerToClientSignifiers.DisplayHostMessage},{csv[2]}", Room.clientUserID, pipeline);
+                        SendMessageToClient($"{ServerToClientSignifiers.DisplayHostMessage},{csv[2]}", Room.hostUserID, pipeline);
+                        foreach (var ID in Room.observerIDs) SendMessageToClient($"{ServerToClientSignifiers.DisplayHostMessage},{csv[2]}", ID, pipeline);
+                }
+                else if (clientConnectionID == Room.clientUserID)
+                {
+                    SendMessageToClient($"{ServerToClientSignifiers.DisplayClientMessage},{csv[2]}", Room.clientUserID, pipeline);
+                    SendMessageToClient($"{ServerToClientSignifiers.DisplayClientMessage},{csv[2]}", Room.hostUserID, pipeline);
+                    foreach (var ID in Room.observerIDs) SendMessageToClient($"{ServerToClientSignifiers.DisplayClientMessage},{csv[2]}", ID, pipeline);
+                }
                 break;
             }
         }
@@ -225,6 +255,7 @@ static public class NetworkServerProcessing
     static public void DisconnectionEvent(int clientConnectionID)
     {
         Debug.Log("Client disconnection, ID == " + clientConnectionID);
+        if(LoggedInUsers.ContainsKey(clientConnectionID)) LoggedInUsers.Remove(clientConnectionID);
     }
 
     #endregion
@@ -259,6 +290,7 @@ static public class ClientToServerSignifiers
     public const int LeaveWaitingRoom = 5;
     public const int LeaveGame = 6;
     public const int GameMove = 7;
+    public const int PlayerMessage = 8;
 }
 
 static public class ServerToClientSignifiers
@@ -285,6 +317,8 @@ static public class ServerToClientSignifiers
     public const int GameWin = 19;
     public const int GameLose = 20;
     public const int OpponentDisconnected = 21;
+    public const int DisplayHostMessage = 22;
+    public const int DisplayClientMessage = 23;
 }
 
 #endregion
